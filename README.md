@@ -2,10 +2,14 @@
 Autonomously post in Facebook events after time interval
 
 ### Dependency
-`pip install bs4 lxml pyautogui`
+1. \> Python 3.0 
+2. `pip install bs4 lxml pyautogui`
 
 ### Variables
-`event_link`
-`standing_link`
-`robot_greeting`
-`contest_start_time`
+1. `event_link`
+2. `standing_link`
+3. `robot_greeting`
+4. `contest_start_time`
+
+### Execute
+`python poster.py`
