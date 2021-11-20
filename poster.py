@@ -13,13 +13,15 @@ import socket
 import random
 import platform
 
-standing_link = 'http://oj.synapse0.com/standings.php?contest=1001'
+# standing_link = 'http://oj.synapse0.com/standings.php?contest=1001'
 event_link = 'https://www.facebook.com/events/411079077292218/?active_tab=discussion'
+# event_link = "https://www.facebook.com/events/271895754901590" # test
 robot_greeting = ['Beep bop I\'m a Robot', 'Robot says', 'Ranklist alert']
 sleep_after_post_success = 900 # 15 minutes
 sleep_after_post_fail = 60 # 1 minutes
 sleep_start_time = 300 # 5 minutes
 contest_start_time = datetime.datetime.now(datetime.timezone.utc).replace(day=20, month=11, year=2021, hour=4, minute=0, second=0, microsecond=0)
+contest_end_time = datetime.datetime.now(datetime.timezone.utc).replace(day=20, month=11, year=2021, hour=6, minute=30, second=0, microsecond=0)
 
 def GetGoogleChrome():
     system_ = platform.system()
@@ -32,11 +34,11 @@ def GetGoogleChrome():
 
 chrome_path = GetGoogleChrome()
 
-def FetchStandingHtmlPage():
-    print(f'sending request [{standing_link}]...')
+def FetchStandingHtmlPage(url):
+    print(f'sending request [{url}]...')
     isError, html = False, None
     try:
-        client = uReq(standing_link, timeout=20)
+        client = uReq(url, timeout=20)
         html = client.read()
         client.close()
     except HTTPError as error:
@@ -59,8 +61,32 @@ def FetchStandingHtmlPage():
 
     return isError, html
 
-def GetStanding():
-    isError, htmlResponse = FetchStandingHtmlPage()
+def GetStandingLinks():
+    isError, htmlResponse = FetchStandingHtmlPage('http://oj.synapse0.com/')
+
+    if isError:
+        raise Exception('Skipping process due to error...')
+    standing_links = []
+    soup = BeautifulSoup(htmlResponse, features="lxml")
+
+    divs = soup.find_all('div', class_='contest-list')
+    # span <- th <- tr <- thead -> tbody -> trs
+    anchors = divs[0].find_all('a', class_='list-group-item-action')
+    # print(len(anchors))
+    for anchor in anchors:
+        h_text = anchor.find('h6').get_text().strip().lower()
+        
+        if  "intra" in h_text and\
+            "aiub" in h_text and\
+            "programming" in h_text and\
+            "contest" in h_text and\
+            "running" in h_text:
+                standing_links.append(anchor['href'])
+    
+    return standing_links  
+
+def GetStanding(standing_link):
+    isError, htmlResponse = FetchStandingHtmlPage(standing_link)
 
     if isError:
         raise Exception('Skipping process due to error...')
@@ -160,25 +186,38 @@ def WriteFBEventPost(rank, name, problems_solved, post_number):
     # close window
     PressCommandW()
 
-def FetchRankAndPost(post_number):
-    # check contest start time
-    if datetime.datetime.now(datetime.timezone.utc) < contest_start_time:
-        print(f'Contest has not started yet... start time: {contest_start_time}')
-        time.sleep(sleep_start_time)
-        FetchRankAndPost(post_number+1)
-        return
+def FetchRankAndPost():
+    post_number = 1
+    while(True):
+        # check contest start time
+        if datetime.datetime.now(datetime.timezone.utc) < contest_start_time:
+            print(f'Contest has not started yet... start time: {contest_start_time}')
+            time.sleep(sleep_start_time)
+            continue
+        elif datetime.datetime.now(datetime.timezone.utc) > contest_end_time:
+            print(f'Contest has ended, exiting this program...')
+            exit(0)
 
-    try:
-        rank, name, problems_solved = GetStanding()
-        print('Posting in Facebook...')
-        WriteFBEventPost(rank, name, problems_solved, post_number)
-        print(f'Successfully posted post no. {post_number} in Facebook!')
-        time.sleep(sleep_after_post_success)
-    except Exception as e:
-        print(f'[ERROR] getting standings: {e}')
-        time.sleep(sleep_after_post_fail)
+        try:
+            standing_links = GetStandingLinks()
+            if len(standing_links) <= 0:
+                print(f'[INFO] no contest links found yet')
+                time.sleep(sleep_start_time)
+                continue
+        except:
+            print(f'[ERROR] getting standing links: {e}')
+            time.sleep(sleep_start_time)
+            continue
 
-    print('----------------------')
-    FetchRankAndPost(post_number+1)
+        try:
+            rank, name, problems_solved = GetStanding(f'http://oj.synapse0.com/{standing_links[0]}')
+            print('Posting in Facebook...')
+            WriteFBEventPost(rank, name, problems_solved, post_number)
+            print(f'Successfully posted post no. {post_number} in Facebook!')
+            post_number += 1
+            time.sleep(sleep_after_post_success)
+        except Exception as e:
+            print(f'[ERROR] getting standings: {e}')
+            time.sleep(sleep_after_post_fail)
 
-FetchRankAndPost(1)
+FetchRankAndPost()
